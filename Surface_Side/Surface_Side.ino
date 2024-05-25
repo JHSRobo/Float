@@ -41,15 +41,16 @@ void onReceive(int packetSize){
     contents += (char) LoRa.read();
   }
   
-  if(contents.substring(0,5).equals("P.O.D")){
+  if(contents.substring(0,4).equals("EX02")){
     Serial.print(contents);
     Serial.print(" w/ RSSI: ");
     Serial.println(LoRa.packetRssi());
   }
-  if(contents.substring(0,1).equals("{")){
-    Serial.println(contents);
+  if(contents.substring(0,3).equals("---")){
+    Serial.print(contents);
+    Serial.print(" w/ RSSI: ");
+    Serial.println(LoRa.packetRssi());
   }
-  //Serial.println(contents);
   contents = "";
 }
 

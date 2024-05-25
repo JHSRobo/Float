@@ -34,13 +34,14 @@ String go_down = "down";
 String start_mission = "start";
 String hold = "hold";
 String profiling_data = "P.O.D Data: ";
-int profiles_completed = 0;
+int profile_count = 0;
 boolean profile_completed = false;
 boolean perform_mission = false;
 
 struct DepthTS {
   unsigned long time;
   double depth;
+  double pressure;
 };
 
 ArrayList<DepthTS> myList(ArrayList<DepthTS>::DYNAMIC);
@@ -123,55 +124,49 @@ void loop() {
   delay(200);
   digitalWrite(ledPin, LOW);
   delay(800);
-  displayDepth();
-  sensor.read();
-  LoRa.beginPacket();
-  LoRa.print("P.O.D  ");
-  LoRa.print(millis()/1000);
-  LoRa.print("  ");
-  LoRa.print(sensor.pressure());
-  LoRa.print(" KPa");
-  LoRa.print("  ");
-  LoRa.print(sensor.depth());
-  LoRa.print(" meters");
-  LoRa.endPacket();
+  depth_ts = readData();
+  Serial.println(depth_ts.depth);
+  sendData(depth_ts);
+  
   if(perform_mission){
     perform_mission = false;
     performMission();
   }
-  if(profiles_completed <= 2 && profile_completed){
-    delay(1000);
-    LoRa.beginPacket();
-    LoRa.print("P.O.D DATA SENDING!!!");
-    LoRa.endPacket();
+  if(profile_completed){
+    String data_msg = "---start of profile " + String(profile_count) + " data---";
+    sendMessage(data_msg);
     delay(500);
     for(int i = 0; i < myList.size(); i++){
       depth_ts = myList.get(i);
-      String data = "{";
-      data += String(depth_ts.time);
-      data += ",";
-      data += String(depth_ts.depth);
-      data += "}";
-      Serial.println(data);
-      LoRa.beginPacket();
-      LoRa.print(String(data));
-      LoRa.endPacket();
+      sendData(depth_ts);
       delay(500);
     }
-    delay(100);
-    Serial.print("Profiling data: ");
-    Serial.println(profiling_data);
-    profiling_data = "P.O.D data: ";
-    myList.clear();
+    data_msg = "---end---";
+    sendMessage(data_msg);
+    delay(500);
     profile_completed = false;
-    if(profiles_completed == 1){
-      performMission();
-    }
-    if(profiles_completed == 2){
-      profiles_completed = 0;
-    }
+    myList.clear();
   }
   LoRa.receive();
+}
+
+DepthTS readData() {
+  DepthTS data;
+  sensor.read();
+  data.time = millis()/1000;
+  data.depth = sensor.depth();
+  data.pressure = sensor.pressure();
+  return data;
+}
+void sendData(DepthTS ts){
+  String msg = "EX02 " + String(ts.time) + " sec " + String(ts.depth) + " m " + String(ts.pressure) + " kPa";
+  sendMessage(msg);
+}
+
+void sendMessage(String msg){
+  LoRa.beginPacket();
+  LoRa.print(String(msg));
+  LoRa.endPacket();
 }
 
 void displayDepth() {
@@ -203,61 +198,62 @@ void performMission() {
   digitalWrite(MOTOR_IN1,LOW);
   digitalWrite(MOTOR_IN2,LOW);
   sensor.read();
-  float depth = sensor.depth();
+  double depth = sensor.depth();
+  double pressure = sensor.pressure();
   // Descends until P.O.D is 1 meter deep
   while (depth < 1.0){
     digitalWrite(MOTOR_IN1,HIGH);
     displayDepth();
-    sensor.read();
-    depth = sensor.depth();
     current_time = millis();
     if((current_time-last_marker)>1000){
-      depth_ts = {current_time/1000, depth};
+      depth_ts = readData();
       myList.add(depth_ts);
       last_marker = current_time;
     }
+    sensor.read();
+    depth = sensor.depth();
     delay(100);
   }
   // Coasts until P.O.D is 2.5 meters deep
   while (sensor.depth() < 2.5){
     digitalWrite(MOTOR_IN1,LOW);
     displayDepth();
-    sensor.read();
-    depth = sensor.depth();
     current_time = millis();
     if((current_time-last_marker)>1000){
-      depth_ts = {current_time/1000, depth};
+      depth_ts = readData();
       myList.add(depth_ts);
       last_marker = current_time;
-    } 
-    delay(100);     
+    }
+    sensor.read();
+    depth = sensor.depth();
+    delay(100);    
   }  
   // Ascends until P.O.D is 1.5 meters deep
   while (sensor.depth() > 1.5){
     digitalWrite(MOTOR_IN2, HIGH);
     displayDepth();
-    sensor.read();
-    depth = sensor.depth();
     current_time = millis();
     if((current_time-last_marker)>1000){
-      depth_ts = {current_time/1000, depth};
+      depth_ts = readData();
       myList.add(depth_ts);
       last_marker = current_time;
     }
+    sensor.read();
+    depth = sensor.depth();
     delay(100);
   }
   // Coasts until P.O.D is 0.5 meters deep
   while (sensor.depth() > 0.5){
     digitalWrite(MOTOR_IN2,LOW);
     displayDepth();
-    sensor.read();
-    depth = sensor.depth();
     current_time = millis();
     if((current_time-last_marker)>1000){
-      depth_ts = {current_time/1000, depth};
+      depth_ts = readData();
       myList.add(depth_ts);
       last_marker = current_time;
     }
+    sensor.read();
+    depth = sensor.depth();
     delay(100);
   }
 
@@ -275,7 +271,7 @@ void performMission() {
     profiling_data += "} ";
   }
   profile_completed = true;
-  profiles_completed += 1;
+  profile_count += 1;
   delay(1000);
   Serial.println("Successfully completed profile");
 }
