@@ -34,6 +34,7 @@ String go_down = "down";
 String start_mission = "start";
 String hold = "hold";
 String profiling_data = "P.O.D Data: ";
+String data_msg;
 int profile_count = 0;
 boolean profile_completed = false;
 boolean perform_mission = false;
@@ -126,24 +127,29 @@ void loop() {
   delay(800);
   depth_ts = readData();
   Serial.println(depth_ts.depth);
-  sendData(depth_ts);
+  sendData(depth_ts, "");
   
   if(perform_mission){
     perform_mission = false;
     performMission();
   }
   if(profile_completed){
-    String data_msg = "---start of profile " + String(profile_count) + " data---";
-    sendMessage(data_msg);
-    delay(500);
-    for(int i = 0; i < myList.size(); i++){
-      depth_ts = myList.get(i);
-      sendData(depth_ts);
+    data_msg = "---start of profile " + String(profile_count) + " data---";
+    for(int i = 0; i < 5; i++){
+      sendMessage(data_msg);
       delay(500);
     }
+    for(int i = 0; i < myList.size(); i++){
+      depth_ts = myList.get(i);
+      sendData(depth_ts, "*");
+      delay(500);
+    }
+    Serial.println(myList.size());
     data_msg = "---end---";
-    sendMessage(data_msg);
-    delay(500);
+    for(int i = 0; i < 5; i++){
+      sendMessage(data_msg);
+      delay(500);
+    }
     profile_completed = false;
     myList.clear();
   }
@@ -158,8 +164,8 @@ DepthTS readData() {
   data.pressure = sensor.pressure();
   return data;
 }
-void sendData(DepthTS ts){
-  String msg = "EX02 " + String(ts.time) + " sec " + String(ts.depth) + " m " + String(ts.pressure) + " kPa";
+void sendData(DepthTS ts, String prefix){
+  String msg = prefix + "EX15 " + String(ts.time) + " sec " + String(ts.depth) + " m " + String(ts.pressure) + " kPa";
   sendMessage(msg);
 }
 

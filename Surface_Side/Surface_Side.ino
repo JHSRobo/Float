@@ -13,11 +13,12 @@ byte buttonCounter = 0;
 const int upPin = 5;
 const int downPin = 6;
 const int startPin = 9;
+bool receivedHeader = false;
 String contents = "";
 
 void setup() {
 
-  Serial.begin(115200);
+  Serial.begin(9600);
   // Setup LoRa module
   LoRa.setPins(csPin, resetPin, irqPin); 
 
@@ -41,15 +42,23 @@ void onReceive(int packetSize){
     contents += (char) LoRa.read();
   }
   
-  if(contents.substring(0,4).equals("EX02")){
+  if(contents.substring(0,4).equals("EX15")){
     Serial.print(contents);
     Serial.print(" w/ RSSI: ");
     Serial.println(LoRa.packetRssi());
+    receivedHeader = false;
   }
-  if(contents.substring(0,3).equals("---")){
+  if(contents.substring(0,3).equals("---") && !receivedHeader){
     Serial.print(contents);
     Serial.print(" w/ RSSI: ");
     Serial.println(LoRa.packetRssi());
+    receivedHeader = true;
+  }
+  if(contents.substring(0,5).equals("*EX15")){
+    Serial.print(contents);
+    Serial.print(" w/ RSSI: ");
+    Serial.println(LoRa.packetRssi());
+    receivedHeader = false;
   }
   contents = "";
 }
@@ -90,5 +99,5 @@ void loop() {
   }
 
   LoRa.receive();
-  delay(200);
+  delay(500);
 }
