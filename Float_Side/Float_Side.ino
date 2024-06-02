@@ -29,10 +29,7 @@ const int ledPin = 13;
  
 // Receive message variables
 String contents = "";
-String go_up = "up";
-String go_down = "down";
-String start_mission = "start";
-String hold = "hold";
+
 String profiling_data = "P.O.D Data: ";
 String data_msg;
 int profile_count = 0;
@@ -81,7 +78,6 @@ void setup() {
     Serial.println("\n\n\n");
     delay(5000);
   }
-
   pinMode(MOTOR_IN1, OUTPUT);
   pinMode(MOTOR_IN2, OUTPUT);
   digitalWrite(ledPin, HIGH);
@@ -92,23 +88,25 @@ void setup() {
   LoRa.receive();
 }
 
+//void(* resetFunc) (void) = 0;
+
 void onReceive(int packetSize){
   if (packetSize == 0) return;
 
   while (LoRa.available()) {
     contents += (char)LoRa.read();
   }
-  if (contents.equals(go_up)) {
+  if (contents.equals("up")) {
     Serial.println(contents);
     goUp();
   }
 
-  else if (contents.equals(go_down)) {
+  else if (contents.equals("down")) {
     Serial.println(contents);
     goDown();
   }
 
-  else if (contents.equals(start_mission)){
+  else if (contents.equals("start")){
     Serial.println(contents);
     perform_mission = true;
   }
@@ -117,6 +115,10 @@ void onReceive(int packetSize){
     digitalWrite(MOTOR_IN1, LOW);
     digitalWrite(MOTOR_IN2, LOW);
   }
+
+  // else if (contents.equals("reset")){
+  //   resetFunc();
+  // }
   contents = "";
 }
 
@@ -135,7 +137,7 @@ void loop() {
   }
   if(profile_completed){
     data_msg = "---start of profile " + String(profile_count) + " data---";
-    for(int i = 0; i < 5; i++){
+    for(int i = 0; i < 10; i++){
       sendMessage(data_msg);
       delay(500);
     }
@@ -146,7 +148,7 @@ void loop() {
     }
     Serial.println(myList.size());
     data_msg = "---end---";
-    for(int i = 0; i < 5; i++){
+    for(int i = 0; i < 10; i++){
       sendMessage(data_msg);
       delay(500);
     }
@@ -205,6 +207,7 @@ void performMission() {
   digitalWrite(MOTOR_IN2,LOW);
   sensor.read();
   double depth = sensor.depth();
+  double previous_depth;
   double pressure = sensor.pressure();
   // Descends until P.O.D is 1 meter deep
   while (depth < 1.0){
@@ -216,10 +219,16 @@ void performMission() {
       myList.add(depth_ts);
       last_marker = current_time;
     }
+    previous_depth = depth;
     sensor.read();
     depth = sensor.depth();
+    while(abs(depth-previous_depth)>1.0){
+      sensor.read();
+      depth = sensor.depth();
+    }
     delay(100);
   }
+  sensor.read();
   // Coasts until P.O.D is 2.5 meters deep
   while (sensor.depth() < 2.5){
     digitalWrite(MOTOR_IN1,LOW);
@@ -230,10 +239,16 @@ void performMission() {
       myList.add(depth_ts);
       last_marker = current_time;
     }
+    previous_depth = depth;
     sensor.read();
     depth = sensor.depth();
-    delay(100);    
+    while(abs(depth-previous_depth)>1.0){
+      sensor.read();
+      depth = sensor.depth();
+    }
+    delay(100);   
   }  
+  sensor.read();
   // Ascends until P.O.D is 1.5 meters deep
   while (sensor.depth() > 1.5){
     digitalWrite(MOTOR_IN2, HIGH);
@@ -244,10 +259,16 @@ void performMission() {
       myList.add(depth_ts);
       last_marker = current_time;
     }
+    previous_depth = depth;
     sensor.read();
     depth = sensor.depth();
+    while(abs(depth-previous_depth)>1.0){
+      sensor.read();
+      depth = sensor.depth();
+    }
     delay(100);
   }
+  sensor.read();
   // Coasts until P.O.D is 0.5 meters deep
   while (sensor.depth() > 0.5){
     digitalWrite(MOTOR_IN2,LOW);
@@ -258,11 +279,21 @@ void performMission() {
       myList.add(depth_ts);
       last_marker = current_time;
     }
+    previous_depth = depth;
     sensor.read();
     depth = sensor.depth();
+    while(abs(depth-previous_depth)>1.0){
+      sensor.read();
+      depth = sensor.depth();
+    }
     delay(100);
   }
-
+  for(int i = 0; i < 5; i++){
+    depth_ts = readData();
+    myList.add(depth_ts);
+    delay(1000);
+  }
+  depth_ts = readData();
   digitalWrite(MOTOR_IN1,LOW);
   digitalWrite(MOTOR_IN2,LOW);
   DepthTS ts;

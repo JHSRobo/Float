@@ -26,10 +26,14 @@ serial_inst = serial.Serial(com, baud, timeout=1)
 profiling_done = False
 is_read_profile_data = False
 profile_count = 1
+previous_depth = 0
 
 print()
 while serial_inst.isOpen() is True:
-    data = str(serial_inst.readline().decode("utf-8").rstrip())
+    try:
+        data = str(serial_inst.readline().decode("utf-8").rstrip())
+    except:
+        pass
     if data != '':
         print(data)     
         if "---start of profile" in data:
@@ -42,7 +46,10 @@ while serial_inst.isOpen() is True:
 
         if (is_read_profile_data and "EX15" in data):
             tokens = data.split(' ')
+            if((float(tokens[3]) < -1.0) and (float(tokens[3]) > 5.0)):
+                tokens[3] = previous_depth
             data_file.write(f"{tokens[1]} {tokens[3]} {tokens[5]}\n")
+            previous_depth = tokens[3]
             data_file.flush()
 
         if "---end---" in data:

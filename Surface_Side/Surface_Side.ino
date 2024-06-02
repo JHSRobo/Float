@@ -10,9 +10,10 @@ const int irqPin = 21;    // Must be a hardware interrupt pin
 // Message counter
 byte buttonCounter = 0;
 
-const int upPin = 5;
-const int downPin = 6;
+const int upPin = 6;
+const int downPin = 5;
 const int startPin = 9;
+// const int resetFloatPin = 10;
 bool receivedHeader = false;
 String contents = "";
 
@@ -32,6 +33,7 @@ void setup() {
   pinMode(upPin, INPUT_PULLUP);
   pinMode(downPin, INPUT_PULLUP);
   pinMode(startPin, INPUT_PULLUP);
+  // pinMode(resetFloatPin, INPUT_PULLUP);
   LoRa.onReceive(onReceive);
   LoRa.receive();
 }
@@ -43,21 +45,15 @@ void onReceive(int packetSize){
   }
   
   if(contents.substring(0,4).equals("EX15")){
-    Serial.print(contents);
-    Serial.print(" w/ RSSI: ");
-    Serial.println(LoRa.packetRssi());
+    displayContents(contents);
     receivedHeader = false;
   }
   if(contents.substring(0,3).equals("---") && !receivedHeader){
-    Serial.print(contents);
-    Serial.print(" w/ RSSI: ");
-    Serial.println(LoRa.packetRssi());
+    displayContents(contents);
     receivedHeader = true;
   }
   if(contents.substring(0,5).equals("*EX15")){
-    Serial.print(contents);
-    Serial.print(" w/ RSSI: ");
-    Serial.println(LoRa.packetRssi());
+    displayContents(contents);
     receivedHeader = false;
   }
   contents = "";
@@ -65,39 +61,47 @@ void onReceive(int packetSize){
 
 void loop() {
   // Send packet
-  if(digitalRead(upPin) == LOW){
-    LoRa.beginPacket();
-    LoRa.print("up");
-    LoRa.endPacket();
+  if(digitalRead(upPin) == HIGH){
+    sendMessage("up");
     Serial.print("Up pressed: ");
     Serial.println(buttonCounter);
     buttonCounter++;
   }
 
-  else if(digitalRead(downPin) == LOW) {
-    LoRa.beginPacket();
-    LoRa.print("down");
-    LoRa.endPacket();
+  else if(digitalRead(downPin) == HIGH) {
+    sendMessage("down");
     Serial.print("Down pressed: ");
     Serial.println(buttonCounter);
     buttonCounter++;
   }
 
-  else if(digitalRead(startPin) == LOW){
-    LoRa.beginPacket();
-    LoRa.print("start");
-    LoRa.endPacket();
+  else if(digitalRead(startPin) == HIGH){
+    sendMessage("start");
     Serial.print("Start pressed: ");
     Serial.println(buttonCounter);
     buttonCounter++;
   }
 
+  // else if(digitalRead(resetFloatPin) == LOW){
+  //   sendMessage("reset");
+  // }
+
   else {
-    LoRa.beginPacket();
-    LoRa.print("hold");
-    LoRa.endPacket();
+    sendMessage("hold");
   }
 
   LoRa.receive();
   delay(500);
+}
+
+void sendMessage(String msg){
+  LoRa.beginPacket();
+  LoRa.print(String(msg));
+  LoRa.endPacket();
+}
+
+void displayContents(String contents){
+  Serial.print(contents);
+  Serial.print(" w/ RSSI: ");
+  Serial.println(LoRa.packetRssi());
 }
