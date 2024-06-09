@@ -10,8 +10,8 @@ const int irqPin = 21;    // Must be a hardware interrupt pin
 // Message counter
 byte buttonCounter = 0;
 
-const int upPin = 6;
-const int downPin = 5;
+const int upPin = 5;
+const int downPin = 6;
 const int startPin = 9;
 // const int resetFloatPin = 10;
 bool receivedHeader = false;
@@ -61,21 +61,21 @@ void onReceive(int packetSize){
 
 void loop() {
   // Send packet
-  if(digitalRead(upPin) == HIGH){
+  if(digitalRead(upPin) == LOW){
     sendMessage("up");
     Serial.print("Up pressed: ");
     Serial.println(buttonCounter);
     buttonCounter++;
   }
 
-  else if(digitalRead(downPin) == HIGH) {
+  else if(digitalRead(downPin) == LOW) {
     sendMessage("down");
     Serial.print("Down pressed: ");
     Serial.println(buttonCounter);
     buttonCounter++;
   }
 
-  else if(digitalRead(startPin) == HIGH){
+  else if(digitalRead(startPin) == LOW){
     sendMessage("start");
     Serial.print("Start pressed: ");
     Serial.println(buttonCounter);
@@ -91,7 +91,7 @@ void loop() {
   }
 
   LoRa.receive();
-  delay(500);
+  delay(800);
 }
 
 void sendMessage(String msg){

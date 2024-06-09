@@ -35,6 +35,7 @@ String data_msg;
 int profile_count = 0;
 boolean profile_completed = false;
 boolean perform_mission = false;
+boolean aborted_mission = false;
 
 struct DepthTS {
   unsigned long time;
@@ -47,6 +48,7 @@ DepthTS depth_ts;
 unsigned long start_time = millis();
 unsigned long last_marker = millis();
 unsigned long current_time = millis();
+unsigned long command_start;
 
 void setup() {
  
@@ -88,8 +90,6 @@ void setup() {
   LoRa.receive();
 }
 
-//void(* resetFunc) (void) = 0;
-
 void onReceive(int packetSize){
   if (packetSize == 0) return;
 
@@ -116,9 +116,6 @@ void onReceive(int packetSize){
     digitalWrite(MOTOR_IN2, LOW);
   }
 
-  // else if (contents.equals("reset")){
-  //   resetFunc();
-  // }
   contents = "";
 }
 
@@ -129,7 +126,7 @@ void loop() {
   delay(800);
   depth_ts = readData();
   Serial.println(depth_ts.depth);
-  sendData(depth_ts, "");
+  sendData(depth_ts, "", "");
   
   if(perform_mission){
     perform_mission = false;
@@ -141,9 +138,10 @@ void loop() {
       sendMessage(data_msg);
       delay(500);
     }
+    String profile_suffix = " " + String(profile_count);
     for(int i = 0; i < myList.size(); i++){
       depth_ts = myList.get(i);
-      sendData(depth_ts, "*");
+      sendData(depth_ts, "*", profile_suffix);
       delay(500);
     }
     Serial.println(myList.size());
@@ -163,11 +161,11 @@ DepthTS readData() {
   sensor.read();
   data.time = millis()/1000;
   data.depth = sensor.depth();
-  data.pressure = sensor.pressure();
+  data.pressure = sensor.pressure()/10;
   return data;
 }
-void sendData(DepthTS ts, String prefix){
-  String msg = prefix + "EX15 " + String(ts.time) + " sec " + String(ts.depth) + " m " + String(ts.pressure) + " kPa";
+void sendData(DepthTS ts, String prefix, String suffix){
+  String msg = prefix + "EX15 " + String(ts.time) + " sec " + String(ts.depth) + " m " + String(ts.pressure) + " kPa" + suffix;
   sendMessage(msg);
 }
 
@@ -201,16 +199,50 @@ void goDown() {
   Serial.println("going down");
 }
 
+void abortMission(String status){
+  digitalWrite(MOTOR_IN1, LOW);
+  digitalWrite(MOTOR_IN2, LOW);
+  aborted_mission = true;
+  if(status.equals("pumping down")){
+    Serial.println("Pumping Down Abort");
+    delay(5000);
+    digitalWrite(MOTOR_IN2, HIGH);
+    delay(50000);
+  }
+  if(status.equals("coasting down")){
+    Serial.println("Coasting Down Abort");
+    digitalWrite(MOTOR_IN2, HIGH);
+    delay(30000);
+  }
+  if(status.equals("pumping up")){
+    Serial.println("Pumping Up Abort");
+    delay(30000);
+  }
+  if(status.equals("coasting up")){
+    Serial.println("Coasting Up Abort");
+    delay(10000);
+  }
+  Serial.println("Finished aborted mission");
+  digitalWrite(MOTOR_IN1, LOW);
+  digitalWrite(MOTOR_IN2, LOW);
+  delay(1000);
+}
+
 void performMission() {
   Serial.println("Starting Mission!!!");
   digitalWrite(MOTOR_IN1,LOW);
   digitalWrite(MOTOR_IN2,LOW);
   sensor.read();
   double depth = sensor.depth();
+  while((depth>0.5) || (depth<-0.5)){
+    sensor.read();
+    depth = sensor.depth();
+  }
   double previous_depth;
   double pressure = sensor.pressure();
   // Descends until P.O.D is 1 meter deep
-  while (depth < 1.0){
+  command_start = millis();
+  while ((depth < 1.0) && !aborted_mission){
     digitalWrite(MOTOR_IN1,HIGH);
     displayDepth();
     current_time = millis();
@@ -219,18 +251,29 @@ void performMission() {
       myList.add(depth_ts);
       last_marker = current_time;
     }
+    if((current_time-command_start)>60000){
+      abortMission("pumping down");
+      break;
+    }
     previous_depth = depth;
     sensor.read();
     depth = sensor.depth();
     while(abs(depth-previous_depth)>1.0){
       sensor.read();
       depth = sensor.depth();
+      current_time = millis();
+      if((current_time-command_start)>60000){
+        abortMission("pumping down");
+        break;
+      }
     }
     delay(100);
   }
   sensor.read();
   // Coasts until P.O.D is 2.5 meters deep
-  while (sensor.depth() < 2.5){
+  // 30000
+  command_start = millis();
+  while ((sensor.depth() < 2.5) && !aborted_mission){
     digitalWrite(MOTOR_IN1,LOW);
     displayDepth();
     current_time = millis();
@@ -239,18 +282,29 @@ void performMission() {
       myList.add(depth_ts);
       last_marker = current_time;
     }
+
+    if((current_time-command_start)>30000){
+      abortMission("coasting down");
+      break;
+    }
     previous_depth = depth;
     sensor.read();
     depth = sensor.depth();
     while(abs(depth-previous_depth)>1.0){
       sensor.read();
       depth = sensor.depth();
+      current_time = millis();
+      if((current_time-command_start)>30000){
+        abortMission("coasting down");
+        break;
+      }
     }
     delay(100);   
   }  
   sensor.read();
   // Ascends until P.O.D is 1.5 meters deep
-  while (sensor.depth() > 1.5){
+  command_start = millis();
+  while ((sensor.depth() > 1.5) && !aborted_mission){
     digitalWrite(MOTOR_IN2, HIGH);
     displayDepth();
     current_time = millis();
@@ -259,18 +313,29 @@ void performMission() {
       myList.add(depth_ts);
       last_marker = current_time;
     }
+
+    if((current_time - command_start) > 60000){
+      abortMission("pumping up");
+      break;
+    }
     previous_depth = depth;
     sensor.read();
     depth = sensor.depth();
     while(abs(depth-previous_depth)>1.0){
       sensor.read();
       depth = sensor.depth();
+      current_time = millis();
+      if((current_time-command_start)>60000){
+        abortMission("pumping up");
+        break;
+      }
     }
     delay(100);
   }
   sensor.read();
   // Coasts until P.O.D is 0.5 meters deep
-  while (sensor.depth() > 0.5){
+  command_start = millis();
+  while ((sensor.depth() > 0.5) && !aborted_mission){
     digitalWrite(MOTOR_IN2,LOW);
     displayDepth();
     current_time = millis();
@@ -279,15 +344,25 @@ void performMission() {
       myList.add(depth_ts);
       last_marker = current_time;
     }
+    if((current_time-command_start) > 30000){
+      abortMission("coasting up");
+      break;
+    }
     previous_depth = depth;
     sensor.read();
     depth = sensor.depth();
     while(abs(depth-previous_depth)>1.0){
       sensor.read();
       depth = sensor.depth();
+      current_time = millis();
+      if((current_time-command_start)>30000){
+        abortMission("coasting up");
+        break;
+      }
     }
     delay(100);
   }
+  delay(1000);
   for(int i = 0; i < 5; i++){
     depth_ts = readData();
     myList.add(depth_ts);
@@ -309,6 +384,7 @@ void performMission() {
   }
   profile_completed = true;
   profile_count += 1;
+  aborted_mission = false;
   delay(1000);
   Serial.println("Successfully completed profile");
 }
